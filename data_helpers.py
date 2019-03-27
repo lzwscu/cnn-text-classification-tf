@@ -61,3 +61,36 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
             start_index = batch_num * batch_size
             end_index = min((batch_num + 1) * batch_size, data_size)
             yield shuffled_data[start_index:end_index]
+
+
+def load_data_and_labels_v2(filepath,num_classes):
+    datas,labels_one_hot,labels_normal = [],[],[]
+    with open(filepath,'r',encoding = 'utf-8') as f:
+        #f.readline()
+        for line in f:
+            line = line.strip().split('\t')
+            ## device_id age title
+            if len(line[1].strip()) == 0:
+                continue
+            ## 部分数据抽样训练
+            datas.append(' '.join(line[1].split(',')[:1000]))
+            label_temp = [0] * num_classes
+
+            age = int(line[2])
+            if 13 < age <= 20:
+                label_temp[0] = 1
+            elif 20 < age <= 35:
+                label_temp[1] = 1
+            elif 35 < age <= 45:
+                label_temp[2] = 1
+            elif 45 < age:
+                label_temp[3] = 1
+            else:
+                continue
+
+            #label_temp[int(line[2])] = 1
+            labels_one_hot.append(label_temp)
+            labels_normal.append(int(line[2]))
+    data_size = len(datas)
+    #return [datas,np.array(labels_one_hot),np.array(labels_normal)]
+    return [datas,np.array(labels_one_hot)]
