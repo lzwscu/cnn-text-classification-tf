@@ -43,6 +43,43 @@ def load_data_and_labels(positive_data_file, negative_data_file):
     return [x_text, y]
 
 
+
+
+def load_data_and_labels_v2(train_data_file, num_classes):
+    """
+    Loads MR polarity data from files, splits the data into words and generates labels.
+    Returns split sentences and labels.
+    """
+    x_text, labels = [], []
+    with open(train_data_file, "r") as f:
+        for line in f:
+            line = line.strip().split("\t")
+            if len(line) < 3:
+                continue
+            temp_label = [0] * num_classes
+            age = int(float(line[2]))
+            if 13 < age <= 20:
+                temp_label[0] = 1
+            elif 20 < age <= 35:
+                temp_label[1] = 1
+            elif 35 < age <= 45:
+                temp_label[2] = 1
+            elif 45 < age:
+                temp_label[3] = 1
+            else:
+                continue
+            x_text.append(" ".join(line[1].split(",")[:500]))
+            labels.append(temp_label)
+
+    y = np.array(labels)
+    return [x_text, y]
+
+
+
+
+
+
+
 def batch_iter(data, batch_size, num_epochs, shuffle=True):
     """
     Generates a batch iterator for a dataset.
@@ -61,3 +98,5 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
             start_index = batch_num * batch_size
             end_index = min((batch_num + 1) * batch_size, data_size)
             yield shuffled_data[start_index:end_index]
+
+

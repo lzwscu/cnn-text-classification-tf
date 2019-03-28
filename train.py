@@ -8,14 +8,17 @@ import datetime
 import data_helpers
 from text_cnn import TextCNN
 from tensorflow.contrib import learn
+import gc
 
 # Parameters
 # ==================================================
 
 # Data loading params
-tf.flags.DEFINE_float("dev_sample_percentage", .1, "Percentage of the training data to use for validation")
+tf.flags.DEFINE_float("dev_sample_percentage", 0.2, "Percentage of the training data to use for validation")
 tf.flags.DEFINE_string("positive_data_file", "./data/rt-polaritydata/rt-polarity.pos", "Data source for the positive data.")
 tf.flags.DEFINE_string("negative_data_file", "./data/rt-polaritydata/rt-polarity.neg", "Data source for the negative data.")
+tf.flags.DEFINE_string("train_data_file", "../data/user_age.file.shuf20", "Data source for the train data.")
+tf.flags.DEFINE_integer("num_classes", 4, "num classes, the clas of the labels.")
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character embedding (default: 128)")
@@ -25,7 +28,7 @@ tf.flags.DEFINE_float("dropout_keep_prob", 0.5, "Dropout keep probability (defau
 tf.flags.DEFINE_float("l2_reg_lambda", 0.0, "L2 regularization lambda (default: 0.0)")
 
 # Training parameters
-tf.flags.DEFINE_integer("batch_size", 64, "Batch Size (default: 64)")
+tf.flags.DEFINE_integer("batch_size", 16, "Batch Size (default: 64)")
 tf.flags.DEFINE_integer("num_epochs", 200, "Number of training epochs (default: 200)")
 tf.flags.DEFINE_integer("evaluate_every", 100, "Evaluate model on dev set after this many steps (default: 100)")
 tf.flags.DEFINE_integer("checkpoint_every", 100, "Save model after this many steps (default: 100)")
@@ -33,6 +36,9 @@ tf.flags.DEFINE_integer("num_checkpoints", 5, "Number of checkpoints to store (d
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
+
+# 超过多少次没有提升，提前结束训练
+tf.flags.DEFINE_integer("require_imporvement", 1000, "Early termination")
 
 FLAGS = tf.flags.FLAGS
 # FLAGS._parse_flags()
@@ -47,12 +53,17 @@ def preprocess():
 
     # Load data
     print("Loading data...")
-    x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
+    #x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
+    x_text, y = data_helpers.load_data_and_labels_v2(FLAGS.train_data_file, FLAGS.num_classes)
 
     # Build vocabulary
     max_document_length = max([len(x.split(" ")) for x in x_text])
     vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length)
     x = np.array(list(vocab_processor.fit_transform(x_text)))
+
+
+    del x_text
+    gc.collect()
 
     # Randomly shuffle data
     np.random.seed(10)
@@ -77,10 +88,11 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
     # ==================================================
 
     with tf.Graph().as_default():
-        session_conf = tf.ConfigProto(
-          allow_soft_placement=FLAGS.allow_soft_placement,
-          log_device_placement=FLAGS.log_device_placement)
-        sess = tf.Session(config=session_conf)
+        # session_conf = tf.ConfigProto(
+        #   allow_soft_placement=FLAGS.allow_soft_placement,
+        #   log_device_placement=FLAGS.log_device_placement)
+        #sess = tf.Session(config=session_conf)
+        sess = tf.Session()
         with sess.as_default():
             cnn = TextCNN(
                 sequence_length=x_train.shape[1],
@@ -93,19 +105,19 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
 
             # Define Training procedure
             global_step = tf.Variable(0, name="global_step", trainable=False)
-            optimizer = tf.train.AdamOptimizer(1e-3)
+            optimizer = tf.train.GradientDescentOptimizer(1e-3)
             grads_and_vars = optimizer.compute_gradients(cnn.loss)
             train_op = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
 
             # Keep track of gradient values and sparsity (optional)
-            grad_summaries = []
-            for g, v in grads_and_vars:
-                if g is not None:
-                    grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
-                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
-                    grad_summaries.append(grad_hist_summary)
-                    grad_summaries.append(sparsity_summary)
-            grad_summaries_merged = tf.summary.merge(grad_summaries)
+            # grad_summaries = []
+            # for g, v in grads_and_vars:
+            #     if g is not None:
+            #         grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
+            #         sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+            #         grad_summaries.append(grad_hist_summary)
+            #         grad_summaries.append(sparsity_summary)
+            # grad_summaries_merged = tf.summary.merge(grad_summaries)
 
             # Output directory for models and summaries
             timestamp = str(int(time.time()))
@@ -113,18 +125,18 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
             print("Writing to {}\n".format(out_dir))
 
             # Summaries for loss and accuracy
-            loss_summary = tf.summary.scalar("loss", cnn.loss)
-            acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
-
-            # Train Summaries
-            train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
-            train_summary_dir = os.path.join(out_dir, "summaries", "train")
-            train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
-
-            # Dev summaries
-            dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
-            dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
-            dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
+            # loss_summary = tf.summary.scalar("loss", cnn.loss)
+            # acc_summary = tf.summary.scalar("accuracy", cnn.accuracy)
+            #
+            # # Train Summaries
+            # train_summary_op = tf.summary.merge([loss_summary, acc_summary, grad_summaries_merged])
+            # train_summary_dir = os.path.join(out_dir, "summaries", "train")
+            # train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
+            #
+            # # Dev summaries
+            # dev_summary_op = tf.summary.merge([loss_summary, acc_summary])
+            # dev_summary_dir = os.path.join(out_dir, "summaries", "dev")
+            # dev_summary_writer = tf.summary.FileWriter(dev_summary_dir, sess.graph)
 
             # Checkpoint directory. Tensorflow assumes this directory already exists so we need to create it
             checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
@@ -148,12 +160,13 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                   cnn.input_y: y_batch,
                   cnn.dropout_keep_prob: FLAGS.dropout_keep_prob
                 }
-                _, step, summaries, loss, accuracy = sess.run(
-                    [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
+                _, step, loss, accuracy = sess.run(
+                    [train_op, global_step, cnn.loss, cnn.accuracy],
                     feed_dict)
                 time_str = datetime.datetime.now().isoformat()
-                print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-                train_summary_writer.add_summary(summaries, step)
+                print("train {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+                return accuracy
+                #train_summary_writer.add_summary(summaries, step)
 
             def dev_step(x_batch, y_batch, writer=None):
                 """
@@ -164,15 +177,18 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                   cnn.input_y: y_batch,
                   cnn.dropout_keep_prob: 1.0
                 }
-                step, summaries, loss, accuracy = sess.run(
-                    [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
+                step, loss, accuracy = sess.run(
+                    [global_step, cnn.loss, cnn.accuracy],
                     feed_dict)
                 time_str = datetime.datetime.now().isoformat()
-                print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
-                if writer:
-                    writer.add_summary(summaries, step)
+                print("dev {}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+                return accuracy
+                # if writer:
+                #     writer.add_summary(summaries, step)
 
             # Generate batches
+            best_acc_val = 0.0
+            acc_val = 0.0
             batches = data_helpers.batch_iter(
                 list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
             # Training loop. For each batch...
@@ -182,11 +198,13 @@ def train(x_train, y_train, vocab_processor, x_dev, y_dev):
                 current_step = tf.train.global_step(sess, global_step)
                 if current_step % FLAGS.evaluate_every == 0:
                     print("\nEvaluation:")
-                    dev_step(x_dev, y_dev, writer=dev_summary_writer)
+                    acc_val = dev_step(x_dev, y_dev)
                     print("")
                 if current_step % FLAGS.checkpoint_every == 0:
-                    path = saver.save(sess, checkpoint_prefix, global_step=current_step)
-                    print("Saved model checkpoint to {}\n".format(path))
+                    if acc_val > best_acc_val:
+                        best_acc_val = acc_val
+                        path = saver.save(sess, checkpoint_prefix, global_step=current_step)
+                        print("Saved model checkpoint to {}\n".format(path))
 
 def main(argv=None):
     x_train, y_train, vocab_processor, x_dev, y_dev = preprocess()
