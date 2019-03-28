@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 # ==================================================
 
 # Data loading params
-tf.flags.DEFINE_float("dev_sample_percentage", .1, "Percentage of the training data to use for validation")
+tf.flags.DEFINE_float("dev_sample_percentage", 0.1, "Percentage of the training data to use for validation")
 tf.flags.DEFINE_string("positive_data_file", "./data/rt-polaritydata/rt-polarity.pos", "Data source for the positive data.")
 tf.flags.DEFINE_string("negative_data_file", "./data/rt-polaritydata/rt-polarity.neg", "Data source for the negative data.")
 tf.flags.DEFINE_string("train_data_file", "../data/user_age.file", "Data source for the train data.")
@@ -55,23 +55,31 @@ def preprocess():
     # Build vocabulary
     max_document_length = max([len(x.split(" ")) for x in x_text])
     vocab_processor = learn.preprocessing.VocabularyProcessor(max_document_length)
-    x = np.array(list(vocab_processor.fit_transform(x_text)))
-
-    # Randomly shuffle data
-    np.random.seed(10)
-    shuffle_indices = np.random.permutation(np.arange(len(y)))
-    x_shuffled = x[shuffle_indices]
-    y_shuffled = y[shuffle_indices]
-
-    # Split train/test set
-    # TODO: This is very crude, should use cross-validation
-    dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
-    # x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
-    # y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
+    #x = np.array(list(vocab_processor.fit_transform(x_text)))
 
     x_train, x_dev, y_train, y_dev = train_test_split(x_text, y, test_size=FLAGS.dev_sample_percentage, random_state=42)
 
-    del x, y, x_shuffled, y_shuffled
+    x_train = np.array(list(vocab_processor.fit_transform(x_train)))
+    x_dev = np.array(list(vocab_processor.transform(x_dev)))
+
+    y_train = np.array(y_train)
+    y_dev = np.array(y_dev)
+
+    # Randomly shuffle data
+    # np.random.seed(10)
+    # shuffle_indices = np.random.permutation(np.arange(len(y)))
+    # x_shuffled = x[shuffle_indices]
+    # y_shuffled = y[shuffle_indices]
+
+    # Split train/test set
+    # TODO: This is very crude, should use cross-validation
+    #dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
+    # x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
+    # y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
+    print("this ok")
+    #x_train, x_dev, y_train, y_dev = train_test_split(x, y, test_size=FLAGS.dev_sample_percentage, random_state=42)
+
+    # del x, y, x_shuffled, y_shuffled
 
     print("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
     print("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))

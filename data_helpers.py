@@ -73,10 +73,10 @@ def load_data_and_labels_v2(filepath,num_classes):
             if len(line[1].strip()) == 0:
                 continue
             ## 部分数据抽样训练
-            datas.append(' '.join(line[1].split(',')[:1000]))
+
             label_temp = [0] * num_classes
 
-            age = int(line[2])
+            age = int(float(line[2]))
             if 13 < age <= 20:
                 label_temp[0] = 1
             elif 20 < age <= 35:
@@ -89,8 +89,9 @@ def load_data_and_labels_v2(filepath,num_classes):
                 continue
 
             #label_temp[int(line[2])] = 1
+            datas.append(' '.join(line[1].split(',')[:1000]))
             labels_one_hot.append(label_temp)
-            labels_normal.append(int(line[2]))
+            labels_normal.append(int(float(line[2])))
     data_size = len(datas)
     #return [datas,np.array(labels_one_hot),np.array(labels_normal)]
     return [datas,np.array(labels_one_hot)]
